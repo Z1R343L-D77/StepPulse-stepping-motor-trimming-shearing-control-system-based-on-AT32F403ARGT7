@@ -280,7 +280,7 @@ slaver_offset = 当前step3从返回到金属触发已经走过的距离
 return_dist = RESET_STEPS - master_offset - slaver_offset;
 ```
 
-**这一步的含义是：****还差多少距离才能回到正确位置**
+**这一步的含义是：** **还差多少距离才能回到正确位置**
 
 ---
 
