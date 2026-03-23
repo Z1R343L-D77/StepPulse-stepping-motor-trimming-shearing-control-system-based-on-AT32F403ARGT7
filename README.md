@@ -133,7 +133,7 @@ Master_Pulse_Counter += 4;
 
 ### 4.2.2、系统启动流程
 
-**在 **`main()` 中完成初始化后，会调用：
+在** `main()` **中完成初始化后，会调用：
 
 ```
 Chase_System_Init();
