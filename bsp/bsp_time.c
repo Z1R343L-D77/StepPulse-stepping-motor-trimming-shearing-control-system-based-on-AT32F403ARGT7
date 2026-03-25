@@ -54,7 +54,7 @@ void TMR1_OVF_TMR10_IRQHandler(void)
   if(tmr_flag_get(TMR1, TMR_OVF_FLAG) != RESET)
   {
     systick_ms++;
-    Master_Pulse_Counter += 4;
+    Master_Pulse_Counter += 4;  /* 主轴每 1ms 走 4 个脉冲 即4Khz */
     tmr_flag_clear(TMR1, TMR_OVF_FLAG);
   }
 }
@@ -81,7 +81,7 @@ void bsp_timer_step_main_init(void)
   
   crm_periph_clock_enable(CRM_TMR8_PERIPH_CLOCK, TRUE);
   
-  tmr_base_init(TMR8, 999, 29);          // 8kHz 溢出中断
+  tmr_base_init(TMR8, 999, 29);          /* 8kHz 溢出中断 */ 
   tmr_cnt_dir_set(TMR8, TMR_COUNT_UP);
   
   nvic_irq_enable(TMR8_OVF_TMR13_IRQn, 0, 1);   

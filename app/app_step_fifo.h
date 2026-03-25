@@ -12,19 +12,10 @@
 #ifndef __APP_STEP_FIFO_H__
 #define __APP_STEP_FIFO_H__ 
 
-extern uint32_t step3_cur_trigger_pulse;
-extern uint32_t step3_next_trigger_pulse;
-
 void step_fifo_init(void);
 
 uint8_t step2_queue_peek(uint32_t *pulse);
 uint8_t step2_queue_pop(uint32_t *pulse);
 uint8_t step2_queue_push(uint32_t pulse);
-
-uint8_t step3_queue_push(uint32_t pulse);
-uint8_t step3_queue_pop(uint32_t *pulse);
-uint8_t step3_queue_peek(uint32_t *pulse);
-
-
 
 #endif

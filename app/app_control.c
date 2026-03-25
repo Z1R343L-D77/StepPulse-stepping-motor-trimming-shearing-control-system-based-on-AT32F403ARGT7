@@ -22,7 +22,7 @@ step2_state_t step2_state = STEP2_IDLE;
 volatile uint8_t step2_start;
 volatile uint8_t step3_start;
 
-/* 因为主轴是 3kHz，即每 1ms 走 3 个脉冲 */
+/* 因为主轴是 4kHz，即每 1ms 走 4 个脉冲 */
 uint32_t Master_Pulse_Counter = 0;
 uint32_t s1_trigger_pulse_val = 0;
 uint32_t step3_return_Counter = 0;
@@ -81,6 +81,8 @@ void on_sensor1_trigger(void)
  */
 void on_sensor2_trigger(void)
 {
+    /* 记录 3 号步进电机返回位置 */
+    step3_return_Counter = Master_Pulse_Counter;
     if(step3_state == STEP3_HOMING)
     {
         step3.state = Stop;
@@ -92,7 +94,6 @@ void on_sensor2_trigger(void)
         step3.state = Stop;
         Step_Abort(&step3);
         Step_DMA_IRQHandler(&step3);
-        step3_return_Counter = Master_Pulse_Counter;
     }
 }
 
@@ -219,7 +220,6 @@ void os_step_move_scan(void)
         Step_BuffFill(&step2);
         step2.flag = 0;
     }
-
     if(step3.flag)
     {
         if(Step_IsBuffRdy(&step3))
@@ -236,7 +236,7 @@ void os_step_move_scan(void)
  * @brief 启动步进电机 PWM 运行
  * @param hstep 步进电机控制句柄指针
  * @param stepToGo 要移动的步数
- * @param dir 方向    0: 正向  1: 反向
+ * @param dir 方向    1: 正向  0: 反向  
  * @param useDec 是否使用减速    0: 不使用  1: 使用
  */
 void step_move_start_pwm(stepTypedef *hstep, uint32_t stepToGo, uint8_t dir, uint8_t useDec)

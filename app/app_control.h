@@ -15,14 +15,12 @@
 #include "drv_step.h"
 /* =============== 参数定义（可直接修改） ====================== */
 #define MAIN_STEP_SPEED (4000)     /* 主轴速度,修改需要修改bsp_time.c的主轴计数器 */
-
+#define WAIT_PULSE      (13000)    /* 飞剪触发等待脉冲 */
 #define STEP3_SPEED			(20000)	
 #define STEP2_SPEED			(15000)	
-
+/* =============== 以下不可修改 ====================== */
 #define SYNC_STEPS      (7000)     /* 同步跟随步数 */
 #define RESET_STEPS     (7000)     /* 复位步数 */
-#define WAIT_PULSE      (13000)    /* 飞剪触发等待脉冲 */
-
 #define DIR_RIGHT       (1U)
 #define DIR_LEFT        (0U)
 

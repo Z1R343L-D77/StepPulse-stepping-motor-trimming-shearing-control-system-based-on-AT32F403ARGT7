@@ -1,416 +1,220 @@
+# StepPulse - 步进电机追剪飞剪控制系统
 
-# 🚀 Stepper Chase & Flying Shear System
+[!\[License: MIT\](https://img.shields.io/badge/License-MIT-yellow.svg null)](https://opensource.org/licenses/MIT)
+[!\[Platform: AT32F403\](https://img.shields.io/badge/Platform-AT32F403-blue.svg null)](https://www.arterytek.com/en/products/AT32F403xx)
+[!\[Language: C\](https://img.shields.io/badge/Language-C-green.svg null)](https://en.wikipedia.org/wiki/C_\(programming_language\))
 
 > 基于 AT32F403 (240MHz) 的高性能双轴步进同步控制系统
 > 实现 **追剪 + 飞剪 + 主轴同步 + 多产品连续处理**
 
-# 一、引脚与资源分配
+## 项目简介
 
-**AT32F403ARGT7 240MHZ 其中STEP3是追轴,STEP2是飞轴**
+StepPulse 是一个专为工业自动化设计的步进电机控制系统，主要用于金属材料的追剪和飞剪加工。系统基于 AT32F403ARGT7 微控制器，通过精确的时序控制和误差补偿算法，实现高速、高精度的同步切割功能。
 
-* **GPIOB_PIN_3**: 控制 LED（推挽输出）
-* **GPIOA_PIN_3**: 追剪步进电机方向控制（推挽输出）
-* **GPIOA_PIN_0**: 主轴步进电机PWM控制 (TIM8中断,普通IO翻转)
-* **GPIOA_PIN_1, GPIOA_PIN_2**: 追剪和飞剪的步进电机 PWM 控制（连接 `TMR2_CH2` 和 `TMR5_CH3`）
-* **GPIOA_PIN_6, GPIOA_PIN_11, GPIOC_PIN_9**: Goseiko 金属传感器输入（带内部上拉）
-* **GPIOB_PIN_5**: 脉冲输出（连接 `TIM3_CH2`，用于脉冲mPulse生成）
-* **DMA1_CHANNEL6, DMA1_CHANNEL7**: DMA 通道，用于步进电机脉冲传输
+### 主要特性
 
----
+- **双轴同步控制**：追剪轴（step3）和飞剪轴（step2）协同工作
+- **高精度误差补偿**：通过实时计算主轴与追剪轴的位置偏差，实现精确切割
+- **多产品连续处理**：采用队列机制，支持连续进料的产品加工
+- **硬件加速**：使用 DMA 传输实现高频率脉冲输出，减少 CPU 占用
+- **模块化设计**：分层架构，易于维护和扩展
 
-# 二、整体软件架构设计
+## 硬件资源
 
-****本项目采用典型的****分层架构（BSP + DRV + APP）+ 轻量级调度器（scheduler）**设计。
+### 引脚分配
 
-## 架构分层
+**AT32F403ARGT7 240MHZ**
 
+| 引脚             | 功能              | 说明                          |
+| -------------- | --------------- | --------------------------- |
+| GPIOB\_PIN\_3  | LED 控制          | 推挽输出                        |
+| GPIOA\_PIN\_3  | 追剪步进电机方向控制      | 推挽输出                        |
+| GPIOA\_PIN\_0  | 主轴步进电机 PWM 控制   | TIM8 中断，普通 IO 翻转            |
+| GPIOA\_PIN\_1  | 飞剪步进电机 PWM 控制   | 连接 TMR2\_CH2                |
+| GPIOA\_PIN\_2  | 追剪步进电机 PWM 控制   | 连接 TMR5\_CH3                |
+| GPIOA\_PIN\_6  | Goseiko 金属传感器输入 | 带内部上拉                       |
+| GPIOA\_PIN\_11 | Goseiko 金属传感器输入 | 带内部上拉                       |
+| GPIOC\_PIN\_9  | Goseiko 金属传感器输入 | 带内部上拉                       |
+| GPIOB\_PIN\_5  | 脉冲输出            | 连接 TIM3\_CH2，用于脉冲 mPulse 生成 |
+| DMA1\_CHANNEL6 | DMA 通道          | 用于步进电机脉冲传输                  |
+| DMA1\_CHANNEL7 | DMA 通道          | 用于步进电机脉冲传输                  |
+
+### 传感器配置
+
+| 传感器 | 触发方式 | 作用   |
+| --- | ---- | ---- |
+| X1  | 下降沿  | 启动追赶 |
+| X2  | 上升沿  | 停止同步 |
+| X3  | 下降沿  | 飞轴到位 |
+
+## 软件架构
+
+### 分层设计
+
+```mermaid
+flowchart TD
+    %% 应用层
+    subgraph 应用层
+        app_control["app_control\n运动控制逻辑        "]
+        app_scheduler["app_scheduler\n任务调度管理        "]
+    end
+
+    %% 板级支持层
+    subgraph 板级支持层
+        bsp_step["bsp_step\n步进电机控制        "]
+        bsp_goseiko["bsp_goseiko\n传感器检测          "]
+        bsp_time["bsp_time\n系统时基            "]
+        bsp_led["bsp_led\nLED 控制            "]
+        bsp_mPulse["bsp_mPulse\n脉冲输出            "]
+    end
+
+    %% 驱动层
+    subgraph 驱动层
+        drv_gpio["drv_gpio\nGPIO 驱动          "]
+        drv_goseiko["drv_goseiko\n传感器驱动          "]
+        drv_step["drv_step\n步进驱动            "]
+    end
+
+    %% 硬件层
+    subgraph 硬件层
+        hardware["硬件资源                    "]
+    end
+
+    %% 连接关系
+    app_control --> bsp_step
+    app_control --> bsp_goseiko
+    app_scheduler --> bsp_time
+    
+    bsp_step --> drv_step
+    bsp_goseiko --> drv_goseiko
+    bsp_led --> drv_gpio
+    
+    drv_gpio --> hardware
+    drv_goseiko --> hardware
+    drv_step --> hardware
 ```
-┌──────────────────────────────────────────────┐
-│                 应用层（APP）                  │
-│  • app_control    → 运动控制逻辑               │
-│  • app_scheduler  → 任务调度管理               │
-└────────────────────▲─────────────────────────┘
-┌────────────────────┴─────────────────────────┐
-│              板级支持层（BSP）                 │
-│  • bsp_step     → 步进电机控制（PWM+DMA）       │
-│  • bsp_goseiko  → 传感器边沿检测               │
-│  • bsp_time     → 系统时基（1ms Tick）         │
-│  • bsp_led      → LED控制                     │
-│  • bsp_mPulse   → 板载脉冲输出                 │
-└────────────────────▲─────────────────────────┘
-┌────────────────────┴─────────────────────────┐
-│               驱动层（DRV）                   │
-│  • drv_gpio     → GPIO底层驱动                │
-│  • drv_goseiko  → 传感器采样 + 消抖            │
-│  • drv_step     → 步进电机底层算法驱动梯形/s形   │
-└────────────────────▲─────────────────────────┘
-┌────────────────────┴─────────────────────────┐
-│               硬件层（HW）                     │
-│  • GPIO / TMR / DMA / NVIC                   │
-└──────────────────────────────────────────────┘
-```
 
-# 三、核心运行机制
+### 核心运行机制
 
-## 3.1 主循环架构
+#### 主循环架构
 
-```
+```c
 while(1)
 {
-    scheduler_run();      // 低周期任务调度
-    os_step_move_scan();  // 步进状态扫描
-    os_step_move_ctrl();  // 步进控制
+    scheduler_run();      // 低周期任务调度
+    os_step_move_scan();  // 步进状态扫描
+    os_step_move_ctrl();  // 步进控制
 }
 ```
 
----
+#### 时间基准系统
 
-## 3.2 时间基准系统
+- **1ms 系统节拍（TMR1）**：
+  ```c
+  systick_ms++;           // 系统 systick
+  Master_Pulse_Counter += 4;  // 主轴脉冲累计 4 即 4kHz
+  ```
+- **主轴脉冲（TMR8）**：
+  ```c
+  8kHz 中断 → 翻转 GPIO → 4kHz 方波
+  ```
 
-### 1ms系统节拍（TMR1）
+## 核心功能
 
-```
-systick_ms++;//系统systick
-Master_Pulse_Counter += 4;//主轴脉冲累计4即4khz
-```
+### 追剪控制（step3）
 
-* **全局时间基准**
-* **调度器时间驱动**
-* **主轴脉冲计数**
+1. **回零过程**：系统启动时执行 `STEP3_HOMING → STEP3_HOMING_RESET → STEP3_IDLE`，完成初始位置校准
+2. **同步过程**：X1 传感器触发后，进入 `STEP3_SYNC` 状态，以主轴速度运动追赶产品
+3. **误差补偿**：X2 传感器触发后，计算位置偏差并进行精确修正
+4. **循环运行**：完成一次追剪后，进入 `SYNC → RESET → IDLE` 循环，等待下一个产品
 
----
+### 飞剪控制（step2）
 
-### 主轴脉冲（TMR8）
+1. **任务队列**：每次 X1 触发时，将产品进入时间存入队列
+2. **启动判断**：当产品到达切割位置时，启动飞剪动作
+3. **切割动作**：执行 3800 个脉冲的切割动作
+4. **完成返回**：切割完成后，返回初始位置等待下一次任务
 
-```
-8kHz中断 → 翻转GPIO → 4kHz方波
-```
+### 误差补偿算法
 
-* **主轴脉冲速度**
-
----
-
-# 四、关键功能模块设计
-
-## 4.1 传感器系统（Goseiko）
-
-### 设计模式：**边沿触发 + 回调**
-
-```
-if (下降沿) → on_metal_leave()
-if (上升沿) → on_metal_enter()
-```
-
----
-
-### 三个传感器逻辑
-
-| **传感器** | **触发**   | **作用**     |
-| ---------------- | ---------------- | ------------------ |
-| **X1**     | **下降沿** | **启动追赶** |
-| **X2**     | **上升沿** | **停止同步** |
-| **X3**     | **下降沿** | **飞轴到位** |
-
----
-
-## 4.2 步进电机控制架构
-
-### 4.2.1、系统运行的基础
-
-**系统中最重要的变量是：**
-
-```
-uint32_t Master_Pulse_Counter;
+```c
+uint32_t master_offset = (Master_Pulse_Counter - s1_trigger_pulse_val);
+uint32_t slaver_offset = (uint32_t)((Master_Pulse_Counter - step3_return_Counter) * (STEP3_SPEED / (float)MAIN_STEP_SPEED));
+uint32_t return_dist = RESET_STEPS - master_offset - slaver_offset;
+return_dist = (uint32_t)((uint64_t)return_dist * STEP3_SPEED / (STEP3_SPEED + MAIN_STEP_SPEED));
 ```
 
-**它表示主轴已经走过的“脉冲数”。程序中每 1ms 增加一次：**
-
-```
-Master_Pulse_Counter += 4;
-```
-
-**所以可以理解为：它既是“时间”，也是“位置”;所有控制判断，都是基于这个值做比较.**
-
-### 4.2.2、系统启动流程
-
-在** `main()` **中完成初始化后，会调用：
-
-```
-Chase_System_Init();
-```
-
-**这个函数做了三件事：step3 进入回零状态（HOMING）,step2 进入回零状态,清空step2队列（用于存储产品信息）,此时系统还不会工作，只是在准备状态。**
-
-**只有当：**
-
-```
-step3_start == 1 && step2_start == 1
-```
-
-**系统才真正开始响应传感器。**
-
-### 4.2.3、金属传感器X1 触发
-
-**函数：**
-
-```
-on_sensor1_trigger()
-```
-
-**这是整个流程的起点。**
-
----
-
-#### 1.记录当前主轴位置
-
-```
-s1_trigger_pulse_val = Master_Pulse_Counter;
-```
-
-**表示：**
-
-**当前这个产品，是在这个位置进入系统的。**
-
----
-
-#### 2. 启动追剪（step3）
-
-**如果 step3 当前是空闲状态：**
-
-```
-step3_state == STEP3_IDLE
-```
-
-**就执行：**
-
-```
-step_move_start_pwm(step3, RESET_STEPS, DIR_LEFT)
-```
-
-**step3 开始向左运动，用于追赶产品。**
-
----
-
-#### 3. 记录飞剪任务
-
-```
-step2_queue_push(Master_Pulse_Counter);
-```
-
-**把这个产品的“进入时间”存入队列。**
-
-**注意：这里不会马上启动飞剪，而是先排队。**
-
-### 4.2.4、step3 的工作过程（追剪轴）
-
-**step3 的控制完全在这个函数里：**
-
-```
-step3_move_isr()
-```
-
-**这个函数是在 DMA 完成一次传输后被调用。**
-
----
-
-#### 1. 回零过程
-
-**系统刚启动时：**
-
-```
-STEP3_HOMING → STEP3_HOMING_RESET → STEP3_IDLE
-```
-
-**完成一次往返，确定初始位置。**
-
----
-
-#### 2. 同步过程（SYNC）
-
-**在 X1 触发后，进入：**
-
-```
-STEP3_SYNC
-```
-
-**此时 step3 以主轴速度运动，去“跟上产品”。**
-
----
-
-#### 3. X2 触发（追剪到位）
-
-**函数：**
-
-```
-on_sensor2_trigger()
-```
-
-**发生时：**
-
-```
-Step_Abort(&step3);
-```
-
-**停止当前运动，并记录追轴到位时的脉冲位置：**
-
-```
-step3_return_Counter = Master_Pulse_Counter;
-```
-
----
-
-#### 4. 误差补偿（最关键部分）
-
-**进入：**
-
-```
-STEP3_CATCH
-```
-
-**程序计算：**
-
-```
-master_offset = 当前主轴 - 产品进入时刻
-slaver_offset = 当前step3从返回到金属触发已经走过的距离
-```
-
-**然后：**
-
-```
-return_dist = RESET_STEPS - master_offset - slaver_offset;
-```
-
-**这一步的含义是：** **还差多少距离才能回到正确位置**
-
----
-
-**再做一次速度比例修正后：**
-
-```
-step_move_start_pwm(step3, return_dist, DIR_RIGHT)
-```
-
-**step3 精确回到金属物件位置。**
-
----
-
-#### 5. 循环运行
-
-**之后 step3 会再次进入：**
-
-```
-SYNC → RESET → IDLE
-```
-
-**等待下一个产品。**
-
-### 4.2.5、step2 的工作过程（飞剪轴）
-
-**step2 的控制分为两部分：**
-
----
-
-#### 1. 任务来源（队列）
-
-**每次 X1 触发都会执行：**
-
-```
-step2_queue_push(...)
-```
-
-**所以队列中存的是：每个产品进入的脉冲时间。**
-
----
-
-#### 2. 启动判断（在主循环中）
-
-**函数：**
-
-```
-os_step_move_ctrl()
-```
-
-**逻辑是：**
-
-```
-if (当前主轴 - 产品进入时间 >= WAIT_PULSE) //WAIT_PULSE需要手动调整
-```
-
-**说明：这个产品已经走到了“可以切割的位置”。**
-
----
-
-#### 3. 启动飞剪
-
-```
-step_move_start_pwm(step2, 3800, DIR_LEFT)
-```
-
-**step2 开始执行切割动作。即加速3800个脉冲(步进电机细分为6400)**
-
----
-
-#### 4. 完成后返回
-
-**在：**
-
-```
-step2_move_isr()
-```
-
-**中完成状态切换：**
-
-```
-CATCH → SYNC → IDLE
-```
-
-**等待下一次任务。**
-
-# 五、步进电机实际运行机制（底层）
-
-**所有运动最终都通过这两个函数驱动：**
-
-```
-os_step_move_scan();
-os_step_move_ctrl();
-```
-
----
-
-## 5.1、scan（执行层）
-
-**做的事情是：**
-
-1. **检查 DMA 是否完成**
-2. **取出下一段速度数据**
-3. **继续启动 DMA**
-
-**保证电机连续运行。**
-
----
-
-## 5.2、ctrl（决策层）
-
-**做的事情是：**
-
-* **判断是否启动飞剪**
-* **处理队列**
-* **控制整体流程**
-
----
-
-# 六、完整流程总结
+## 工作流程
 
 1. **系统上电 → 回零**
 2. **等待产品进入**
 3. **X1 触发**
-   * **记录位置**
-   * **step3 开始追**
-   * **step2 入队**
+   - 记录位置
+   - step3 开始追剪
+   - step2 入队
 4. **step3 同步运动**
 5. **X2 触发 → 停止并计算误差**
 6. **step3 回位修正**
 7. **主轴继续走**
-8. **达到 WAIT_PULSE → 启动 step2**
+8. **达到 WAIT\_PULSE → 启动 step2**
 9. **step2 完成切割**
 10. **系统继续处理下一个产品**
+
+## 开发环境
+
+- **IDE**：Keil MDK&#x20;
+- **编译器**：ARMCC / GCC
+- **目标芯片**：AT32F403ARGT7
+- **时钟频率**：240MHz
+
+## 安装与使用
+
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/yourusername/StepPulse.git
+   ```
+2. **打开项目**
+   - 使用 Keil MDK 打开项目文件
+   - 或使用 STM32CubeIDE 导入项目
+3. **配置参数**
+   - 根据实际硬件调整引脚定义
+   - 根据加工需求调整 `WAIT_PULSE` 等参数
+4. **编译与烧录**
+   - 编译项目生成固件
+   - 使用烧录工具将固件写入 AT32F403A 芯片
+
+## 关键参数调整
+
+| 参数                | 说明        | 建议值        |
+| ----------------- | --------- | ---------- |
+| `MAIN_STEP_SPEED` | 主轴步进速度    | 根据实际电机性能调整 |
+| `STEP2_SPEED`     | 飞剪轴步进速度   | 根据实际电机性能调整 |
+| `STEP3_SPEED`     | 追剪轴步进速度   | 根据实际电机性能调整 |
+| `RESET_STEPS`     | 复位步数      | 根据机械结构调整   |
+| `WAIT_PULSE`      | 飞剪启动等待脉冲数 | 根据进料速度调整   |
+
+## 故障排查
+
+| 问题       | 可能原因             | 解决方案             |
+| -------- | ---------------- | ---------------- |
+| 追剪不同步    | 传感器触发时机错误        | 调整传感器位置          |
+| 飞剪切割位置偏差 | WAIT\_PULSE 设置不当 | 调整 WAIT\_PULSE 值 |
+| 步进电机失步   | 速度设置过高           | 降低步进速度           |
+| 系统无响应    | 传感器接线错误          | 检查传感器接线          |
+
+## 许可证
+
+本项目采用 MIT 许可证，详情请查看 [LICENSE](LICENSE) 文件。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request 来改进这个项目。
+
+## 联系方式
+
+- 作者：Z1R343L
+- 邮箱：19816013818\@163.com
+
+***
+
+**注意**：本项目为工业控制系统，使用时请确保遵守相关安全规范，避免发生意外。
